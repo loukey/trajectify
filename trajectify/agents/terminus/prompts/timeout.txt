@@ -1,0 +1,3 @@
+SYSTEM NOTICE: You are running low on time. Wrap up your work immediately.
+If the task is complete, set is_task_complete to true.
+If not, make your best effort in the next 1-2 commands and then mark complete.

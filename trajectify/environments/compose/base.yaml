@@ -1,0 +1,13 @@
+services:
+  main:
+    volumes:
+      - "${HOST_AGENT_DIR}:/logs/agent"
+      - "${HOST_VERIFIER_DIR}:/logs/verifier"
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        limits:
+          cpus: "${CPUS:-1}"
+          memory: "${MEMORY:-1G}"

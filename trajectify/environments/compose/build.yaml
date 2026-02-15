@@ -1,0 +1,6 @@
+services:
+  main:
+    image: "${IMAGE_NAME}"
+    build:
+      context: "${CONTEXT_DIR}"
+      dockerfile: Dockerfile
