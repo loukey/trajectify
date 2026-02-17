@@ -38,14 +38,26 @@ class TerminalBenchLoader(BaseTaskLoader):
 
     def load(self, task_dir: Path) -> Task:
         task_dir = Path(task_dir).resolve()
-        paths = TaskPaths(task_dir=task_dir)
 
-        if not paths.config_path.exists():
+        config_path = task_dir / "task.toml"
+        instruction_path = task_dir / "instruction.md"
+
+        if not config_path.exists():
             raise FileNotFoundError(f"task.toml not found in {task_dir}")
-        if not paths.instruction_path.exists():
+        if not instruction_path.exists():
             raise FileNotFoundError(f"instruction.md not found in {task_dir}")
 
-        raw = toml.loads(paths.config_path.read_text(encoding="utf-8"))
+        paths = TaskPaths(
+            task_dir=task_dir,
+            config_path=config_path,
+            instruction_path=instruction_path,
+            environment_dir=task_dir / "environment",
+            tests_dir=task_dir / "tests",
+            test_script_path=task_dir / "tests" / "test.sh",
+            solution_dir=task_dir / "solution",
+        )
+
+        raw = toml.loads(config_path.read_text(encoding="utf-8"))
 
         # Handle TB2 extensions: memory string, docker_image, storage
         env_raw = raw.get("environment", {})
@@ -53,7 +65,7 @@ class TerminalBenchLoader(BaseTaskLoader):
             env_raw["memory_mb"] = _parse_memory_string(env_raw["memory"])
 
         config = TaskConfig.model_validate(raw)
-        instruction = paths.instruction_path.read_text(encoding="utf-8")
+        instruction = instruction_path.read_text(encoding="utf-8")
 
         return Task(
             name=task_dir.name,

@@ -36,13 +36,21 @@ class Verifier:
             target=_CONTAINER_TESTS,
         )
 
+        # If the test script lives outside tests_dir, upload it separately
+        test_script = self._task.paths.test_script_path
+        try:
+            test_script_rel = test_script.relative_to(self._task.paths.tests_dir)
+        except ValueError:
+            # Script is outside tests_dir (e.g. TB 1.0 run-tests.sh at task root)
+            await self._env.upload_file(
+                source=test_script,
+                target=f"{_CONTAINER_TESTS}/{test_script.name}",
+            )
+            test_script_rel = Path(test_script.name)
+
         # Fix Windows line endings
         await self._env.exec(
             command=f"find {_CONTAINER_TESTS} -type f -exec sed -i 's/\\r$//' {{}} +"
-        )
-
-        test_script_rel = self._task.paths.test_script_path.relative_to(
-            self._task.paths.tests_dir
         )
         stdout_container = f"{_CONTAINER_VERIFIER_DIR}/test-stdout.txt"
 
@@ -51,6 +59,7 @@ class Verifier:
                 f"bash {_CONTAINER_TESTS}/{test_script_rel} 2>&1 "
                 f"| tee {stdout_container}"
             ),
+            env={"TEST_DIR": _CONTAINER_TESTS},
         )
 
         stdout_host = self._host_verifier_dir / "test-stdout.txt"
@@ -59,9 +68,9 @@ class Verifier:
         ):
             stdout_host.write_text(result.stdout, encoding="utf-8")
 
-        return self._read_reward()
+        return self._read_reward(result.return_code)
 
-    def _read_reward(self) -> VerifierResult:
+    def _read_reward(self, return_code: int = 0) -> VerifierResult:
         reward_txt = self._host_verifier_dir / "reward.txt"
         reward_json = self._host_verifier_dir / "reward.json"
 
@@ -83,7 +92,10 @@ class Verifier:
                     f"Cannot parse reward.json: {reward_json}"
                 ) from exc
 
-        raise FileNotFoundError(
-            f"No reward file found at {reward_txt} or {reward_json}. "
-            "Make sure test.sh writes to /logs/verifier/reward.txt or reward.json."
+        # No reward file — fall back to test script exit code
+        # (TB 1.0 scripts don't write reward files)
+        self._logger.info(
+            "No reward file found; using exit code %d", return_code,
         )
+        reward = 1.0 if return_code == 0 else 0.0
+        return VerifierResult(rewards={"reward": reward})

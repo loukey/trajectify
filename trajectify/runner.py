@@ -22,7 +22,9 @@ from trajectify.models.result import (
     TimingInfo,
 )
 from trajectify.models.trajectory import AgentInfo, TrajectoryRecorder
+from trajectify.task_loaders.base import BaseTaskLoader
 from trajectify.task_loaders.terminal_bench import TerminalBenchLoader
+from trajectify.task_loaders.terminal_bench_v1 import TerminalBenchV1Loader
 from trajectify.verifier import Verifier
 
 
@@ -60,7 +62,7 @@ class Runner:
         self._verifier_dir.mkdir(parents=True, exist_ok=True)
 
         # Load the task
-        loader = TerminalBenchLoader()
+        loader = self._detect_loader(config.task_path)
         self._task = loader.load(config.task_path)
 
         # Create the agent
@@ -110,6 +112,18 @@ class Runner:
 
         self._logger = logger.getChild(f"Runner.{config.run_name}")
         self._result: RunResult | None = None
+
+    @staticmethod
+    def _detect_loader(task_path: Path) -> BaseTaskLoader:
+        task_dir = Path(task_path)
+        if (task_dir / "task.toml").exists():
+            return TerminalBenchLoader()
+        elif (task_dir / "task.yaml").exists():
+            return TerminalBenchV1Loader()
+        else:
+            raise FileNotFoundError(
+                f"No task.toml or task.yaml found in {task_dir}"
+            )
 
     async def run(self) -> RunResult:
         self._result = RunResult(

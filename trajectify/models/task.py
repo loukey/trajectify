@@ -9,35 +9,20 @@ from pydantic import BaseModel, Field
 
 
 class TaskPaths(BaseModel):
-    """Resolved paths inside a task directory."""
+    """Resolved paths inside a task directory.
+
+    Each loader fills in the concrete paths for its format.
+    """
 
     model_config = {"arbitrary_types_allowed": True}
 
     task_dir: Path
-
-    @property
-    def config_path(self) -> Path:
-        return self.task_dir / "task.toml"
-
-    @property
-    def instruction_path(self) -> Path:
-        return self.task_dir / "instruction.md"
-
-    @property
-    def environment_dir(self) -> Path:
-        return self.task_dir / "environment"
-
-    @property
-    def tests_dir(self) -> Path:
-        return self.task_dir / "tests"
-
-    @property
-    def test_script_path(self) -> Path:
-        return self.tests_dir / "test.sh"
-
-    @property
-    def solution_dir(self) -> Path:
-        return self.task_dir / "solution"
+    config_path: Path
+    instruction_path: Path | None = None
+    environment_dir: Path
+    tests_dir: Path
+    test_script_path: Path
+    solution_dir: Path | None = None
 
 
 class EnvironmentSpec(BaseModel):
