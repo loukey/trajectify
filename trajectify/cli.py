@@ -65,10 +65,63 @@ def _parse_args() -> argparse.Namespace:
         default="atif",
         help="Comma-separated export formats: atif,sft,rollout",
     )
+    # Task generation mode
+    p.add_argument(
+        "--generate",
+        type=str,
+        metavar="FACTORY",
+        help="Generate tasks using a factory (name or 'all'). Use --list-factories to see available.",
+    )
+    p.add_argument(
+        "--max-count",
+        type=int,
+        default=None,
+        help="Max number of tasks to generate per factory",
+    )
+    p.add_argument(
+        "--list-factories",
+        action="store_true",
+        help="List available task factories and exit",
+    )
     return p.parse_args()
 
 
+def _run_generate(args: argparse.Namespace) -> None:
+    """Handle --generate / --list-factories mode (no LLM needed)."""
+    from trajectify.task_factory import create_factory, list_factories
+
+    if args.list_factories:
+        names = list_factories()
+        print("Available task factories:")
+        for name in names:
+            print(f"  - {name}")
+        return
+
+    output_dir = Path(args.output_dir)
+
+    if args.generate == "all":
+        factory_names = list_factories()
+    else:
+        factory_names = [args.generate]
+
+    total = 0
+    for name in factory_names:
+        factory = create_factory(name)
+        generated = factory.generate_all(output_dir, max_count=args.max_count)
+        total += len(generated)
+        print(f"Factory '{name}': generated {len(generated)} tasks")
+
+    print(f"\nTotal: {total} tasks in {output_dir}")
+
+
 async def _main() -> None:
+    args = _parse_args()
+
+    # Generation mode — no LLM config needed
+    if args.generate or args.list_factories:
+        _run_generate(args)
+        return
+
     llm_cfg = load_llm_config()
     llm_cfg.apply_to_env()
     logger.info(
@@ -76,7 +129,6 @@ async def _main() -> None:
         llm_cfg.model, llm_cfg.api_base or "(default)",
     )
 
-    args = _parse_args()
     export_formats = [f.strip() for f in args.export_formats.split(",")]
 
     if args.config:

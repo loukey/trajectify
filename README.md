@@ -8,6 +8,7 @@ A trajectory collection platform that runs AI agents on tasks in Docker containe
 - **Pluggable agents** — register custom agents via `@register_agent` decorator; ships with `terminus` (LLM-driven terminal agent using tmux)
 - **Pluggable exporters** — ATIF, SFT, and Rollout export formats; easily extensible
 - **Pluggable task loaders** — supports both Terminal-Bench 1.0 (`task.yaml`) and 2.0 (`task.toml`) formats, with auto-detection
+- **Batch task generation** — TaskFactory framework for programmatically generating thousands of task variants from parameter spaces
 - **Parallel orchestration** — run multiple tasks concurrently with configurable concurrency
 - **Automatic verification** — run test scripts inside containers to score agent outputs
 - **Context summarization** — compress long conversations to stay within LLM context limits
@@ -97,6 +98,70 @@ api_key: your-api-key-here
 ```
 
 The platform uses [LiteLLM](https://docs.litellm.ai/) under the hood, so any model supported by LiteLLM can be used (OpenAI, Anthropic, local models, etc.).
+
+## Task Generation
+
+Trajectify includes a **TaskFactory** framework for programmatically generating large numbers of task variants. Instead of hand-crafting each task, you define a parameter space and a generation function — the framework iterates over the Cartesian product to produce complete TB 2.0 task directories.
+
+### Quick Usage
+
+```bash
+# List available factories
+uv run trajectify --list-factories
+
+# Generate 10 tasks from the log_analysis factory
+uv run trajectify --generate log_analysis --output-dir tasks/generated/log-analysis --max-count 10
+
+# Generate all variants from all factories
+uv run trajectify --generate all --output-dir tasks/generated
+```
+
+Generated tasks are standard TB 2.0 directories — they can be run directly with the existing pipeline:
+
+```bash
+uv run trajectify --task tasks/generated/log-analysis/log-nginx-combined-50L-group_a-easy-s1 --agent terminus
+```
+
+### Built-in Factories
+
+| Factory | Domain | Dimensions | Total Variants |
+|---------|--------|-----------|----------------|
+| `log_analysis` | Log parsing → JSON report | 3 formats × 3 sizes × 3 field groups × 3 difficulties × 10 seeds | 810 |
+
+### Creating a New Factory
+
+Create a new file in `trajectify/task_factory/` and use the `@register_factory` decorator:
+
+```python
+from trajectify.task_factory import register_factory
+from trajectify.task_factory.base import GeneratedTask, TaskFactory
+
+@register_factory
+class MyFactory(TaskFactory):
+    @staticmethod
+    def factory_name() -> str:
+        return "my_factory"
+
+    def param_space(self) -> dict[str, list]:
+        return {
+            "variant": ["a", "b", "c"],
+            "difficulty": ["easy", "medium", "hard"],
+            "seed": list(range(1, 11)),
+        }
+
+    def generate(self, params: dict, seed: int) -> GeneratedTask:
+        # Generate deterministic data using random.Random(seed)
+        # Compute expected answers programmatically
+        # Return GeneratedTask with all file contents
+        ...
+```
+
+Then add the import to `trajectify/task_factory/__init__.py` in `_ensure_builtins_loaded()`.
+
+Key design principles:
+- **Deterministic**: Use `random.Random(seed)` — same params + seed always produce the same task
+- **Self-verifying**: Expected answers are computed programmatically and embedded in test files
+- **Compatible**: Output is standard TB 2.0 format, no changes needed in runners or verifiers
 
 ## Supported Task Formats
 
@@ -276,11 +341,15 @@ trajectify/
 │   ├── task.py                # TaskConfig, TaskPaths
 │   ├── trajectory.py          # TrajectoryRecorder
 │   └── usage.py               # UsageInfo
+├── task_factory/
+│   ├── __init__.py            # Factory registry
+│   ├── base.py                # TaskFactory ABC + GeneratedTask
+│   └── log_analysis.py        # Log analysis factory (810 variants)
 ├── task_loaders/
 │   ├── base.py                # BaseTaskLoader ABC
 │   ├── terminal_bench.py      # Terminal-Bench 2.0 loader
 │   └── terminal_bench_v1.py   # Terminal-Bench 1.0 loader
-├── cli.py                     # Entry point
+├── cli.py                     # Entry point + task generation
 ├── orchestrator.py            # Parallel scheduling
 ├── runner.py                  # Single run lifecycle
 ├── verifier.py                # Test script verification
